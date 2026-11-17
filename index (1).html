@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biodata Siswa</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root{--bg:#0b1220;--card:#162033;--line:#26324a;--text:#f1f5f9;--muted:#8b98b0;--accent:#6366f1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:2rem}
+  .sub{color:var(--muted);margin:6px 0 18px}
+  button,input,select{font:inherit;color:var(--text)}
+  .btn{background:var(--accent);border:0;border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:transparent;border:1px solid var(--line)}
+  input,select{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .filters input{flex:1 1 220px}
+  .filters select{width:auto;flex:0 0 auto}
+  .count{color:var(--muted);margin:8px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;padding-bottom:16px}
+  .banner{height:70px}
+  .avatar{width:92px;height:92px;border-radius:50%;border:4px solid var(--bg);margin:-46px auto 0;display:grid;place-items:center;font-weight:800;font-size:1.7rem;overflow:hidden;background:#fff}
+  .avatar img{width:100%;height:100%;object-fit:cover}
+  .name{text-align:center;font-weight:700;font-size:1.1rem;margin:10px 0 2px}
+  .nis{text-align:center;color:var(--muted);margin-bottom:12px}
+  .row{display:flex;justify-content:space-between;padding:9px 20px;border-top:1px solid var(--line)}
+  .row span{color:var(--muted)} .row b{font-weight:700}
+  .empty{color:var(--muted);text-align:center;padding:40px 0;grid-column:1/-1}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+  .overlay.open{display:flex}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;width:100%;max-width:420px;max-height:92vh;overflow:auto}
+  .modal h2{margin:0 0 14px}
+  label{display:block;font-size:.9rem;color:var(--muted);margin:12px 0 6px}
+  .preview{width:88px;height:88px;border-radius:50%;background:var(--bg);border:2px dashed var(--line);margin:0 auto 4px;display:grid;place-items:center;color:var(--muted);font-size:.75rem;overflow:hidden;text-align:center}
+  .preview img{width:100%;height:100%;object-fit:cover}
+  .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  .msg{margin-top:12px;font-size:.9rem;color:#fca5a5;min-height:1.2em}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Biodata Siswa</h1>
+      <p class="sub">Cari siswa berdasarkan nama atau NIS.</p>
+    </div>
+    <button class="btn" id="btnTambah">+ Tambah siswa</button>
+  </header>
+
+  <div class="filters">
+    <input id="cari" placeholder="Cari nama atau NIS">
+    <select id="kelas"><option value="">Semua kelas</option></select>
+  </div>
+  <div class="count" id="count"></div>
+  <div class="grid" id="list"></div>
+</div>
+
+<!-- Form tambah siswa -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="judul">
+    <h2 id="judul">Tambah siswa</h2>
+    <div class="preview" id="preview">Foto</div>
+    <label for="foto">Foto profil</label>
+    <input type="file" id="foto" accept="image/*">
+
+    <label for="nama">Nama lengkap</label>
+    <input id="nama" placeholder="Contoh: Siti Aisyah">
+
+    <label for="nis">NIS</label>
+    <input id="nis" inputmode="numeric" placeholder="Contoh: 1004">
+
+    <label for="kelasInput">Kelas</label>
+    <input id="kelasInput" placeholder="Contoh: X-A">
+
+    <label for="jk">Jenis kelamin</label>
+    <select id="jk">
+      <option>Laki-laki</option>
+      <option>Perempuan</option>
+    </select>
+
+    <div class="msg" id="msg"></div>
+    <div class="actions">
+      <button class="btn ghost" id="btnBatal" type="button">Batal</button>
+      <button class="btn" id="btnSimpan" type="button">Simpan siswa</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ====== GANTI DENGAN MILIK KAMU (Supabase > Project Settings > API) ======
+  const SUPABASE_URL = "https://XXXXXXXX.supabase.co";
+  const SUPABASE_KEY = "ISI_ANON_PUBLIC_KEY_KAMU";
+  // ========================================================================
+
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const BUCKET = "foto-siswa";
+  const WARNA = ["#be2a3c","#c026b0","#2563eb","#0d9488","#d97706","#7c3aed","#16a34a"];
+
+  let semuaSiswa = [];
+  const $ = id => document.getElementById(id);
+
+  function inisial(nama){
+    const p = nama.trim().split(/\s+/);
+    return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase();
+  }
+  function warna(nama){
+    let h = 0; for (const c of nama) h = (h * 31 + c.charCodeAt(0)) % 997;
+    return WARNA[h % WARNA.length];
+  }
+  function esc(s){ const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+  async function muat(){
+    const { data, error } = await db.from("siswa").select("*").order("nama");
+    if (error){ $("list").innerHTML = `<div class="empty">Gagal memuat data: ${esc(error.message)}</div>`; return; }
+    semuaSiswa = data;
+    isiKelas();
+    tampil();
+  }
+
+  function isiKelas(){
+    const dipilih = $("kelas").value;
+    const daftar = [...new Set(semuaSiswa.map(s => s.kelas))].sort();
+    $("kelas").innerHTML = '<option value="">Semua kelas</option>' +
+      daftar.map(k => `<option>${esc(k)}</option>`).join("");
+    $("kelas").value = dipilih;
+  }
+
+  function tampil(){
+    const q = $("cari").value.toLowerCase().trim();
+    const k = $("kelas").value;
+    const hasil = semuaSiswa.filter(s =>
+      (!k || s.kelas === k) &&
+      (!q || s.nama.toLowerCase().includes(q) || String(s.nis).includes(q)));
+
+    $("count").textContent = `${hasil.length} dari ${semuaSiswa.length} siswa`;
+    if (!hasil.length){ $("list").innerHTML = '<div class="empty">Tidak ada siswa yang cocok.</div>'; return; }
+
+    $("list").innerHTML = hasil.map(s => {
+      const w = warna(s.nama);
+      const avatar = s.foto_url
+        ? `<img src="${esc(s.foto_url)}" alt="Foto ${esc(s.nama)}">`
+        : `<span style="color:${w}">${esc(inisial(s.nama))}</span>`;
+      return `
+        <article class="card">
+          <div class="banner" style="background:${w}"></div>
+          <div class="avatar">${avatar}</div>
+          <div class="name">${esc(s.nama)}</div>
+          <div class="nis">NIS ${esc(s.nis)}</div>
+          <div class="row"><span>Kelas</span><b>${esc(s.kelas)}</b></div>
+          <div class="row"><span>Jenis kelamin</span><b>${esc(s.jenis_kelamin)}</b></div>
+        </article>`;
+    }).join("");
+  }
+
+  // ----- modal tambah siswa -----
+  function bukaModal(){ $("overlay").classList.add("open"); $("nama").focus(); }
+  function tutupModal(){
+    $("overlay").classList.remove("open");
+    ["foto","nama","nis","kelasInput"].forEach(id => $(id).value = "");
+    $("jk").selectedIndex = 0;
+    $("preview").innerHTML = "Foto";
+    $("msg").textContent = "";
+  }
+
+  $("foto").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $("preview").innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Pratinjau foto">`;
+  });
+
+  async function simpan(){
+    const nama = $("nama").value.trim();
+    const nis = $("nis").value.trim();
+    const kelas = $("kelasInput").value.trim().toUpperCase();
+    const jk = $("jk").value;
+    const file = $("foto").files[0];
+
+    if (!nama || !nis || !kelas){ $("msg").textContent = "Nama, NIS, dan kelas wajib diisi."; return; }
+    if (file && file.size > 2 * 1024 * 1024){ $("msg").textContent = "Ukuran foto maksimal 2 MB."; return; }
+
+    $("btnSimpan").disabled = true;
+    $("btnSimpan").textContent = "Menyimpan...";
+    $("msg").textContent = "";
+
+    try {
+      let foto_url = null;
+      if (file){
+        const ext = file.name.split(".").pop().toLowerCase();
+        const path = `${nis}-${Date.now()}.${ext}`;
+        const { error: upErr } = await db.storage.from(BUCKET).upload(path, file, { contentType: file.type });
+        if (upErr) throw upErr;
+        foto_url = db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      }
+
+      const { error } = await db.from("siswa").insert({ nama, nis, kelas, jenis_kelamin: jk, foto_url });
+      if (error) throw error;
+
+      tutupModal();
+      await muat();
+    } catch (err){
+      $("msg").textContent = err.code === "23505"
+        ? "NIS sudah terdaftar. Gunakan NIS lain."
+        : "Gagal menyimpan: " + err.message;
+    } finally {
+      $("btnSimpan").disabled = false;
+      $("btnSimpan").textContent = "Simpan siswa";
+    }
+  }
+
+  $("btnTambah").onclick = bukaModal;
+  $("btnBatal").onclick = tutupModal;
+  $("btnSimpan").onclick = simpan;
+  $("overlay").addEventListener("click", e => { if (e.target === $("overlay")) tutupModal(); });
+  $("cari").addEventListener("input", tampil);
+  $("kelas").addEventListener("change", tampil);
+
+  muat();
+</script>
+</body>
+</html>
